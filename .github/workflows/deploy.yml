@@ -1,0 +1,33 @@
+name: Deploy to Ubuntu Server
+
+on:
+  workflow_run:
+    workflows: ["CI Build and Push to GHCR"]
+    types:
+      - completed
+  push:
+    branches: [ main ]
+    paths:
+      - 'docker-compose.yml'
+      - '.env.example'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            cd ${{ secrets.DEPLOY_PATH }}
+            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ secrets.GHCR_USER }} --password-stdin
+            docker compose pull app
+            docker compose up -d app
+            docker image prune -f
